@@ -2,6 +2,8 @@ from fastapi import FastAPI, APIRouter, UploadFile, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from typing import List, Optional
+from fastapi import Query as FastAPIQuery
 import os
 import shutil
 import logging
@@ -13,8 +15,11 @@ from .scrapers.vinted_scraper import VintedScraper
 from .scrapers.amazon_scraper import AmazonScraper
 from services_reconnaissance.face_recognition import capture_face, recognize_face
 from database.db import get_db
+from .bd_scraping_arbook.query import Query
+from .scrapers.utils import Product
 
-#Chatbot
+
+# Chatbot
 from chatbot.chat import Chatbot
 
 # Disable logging by setting the level to WARNING
@@ -123,11 +128,11 @@ async def recognize_face_route(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-
 # Scraping endpoints
 db_manager = DatabaseManager()
 vinted_scraper = VintedScraper(db_manager)
 amazon_scraper = AmazonScraper(db_manager)
+query_instance = Query(db_manager)
 
 PLATFORM_SCRAPERS = {
     "vinted": vinted_scraper,
@@ -140,25 +145,6 @@ async def get_platforms():
     """Get list of available platforms."""
     return {"platforms": list(PLATFORM_SCRAPERS.keys())}
 
-
-@router.get("/search/{platform}/{query}", tags=["Scraper"])
-async def search_products(platform: str, query: str, limit: int = 100):
-    """Search for products across specified platform."""
-    if platform == "all":
-        return await search_all_platforms(query, limit)
-
-    if platform not in PLATFORM_SCRAPERS:
-        raise HTTPException(
-            status_code=400, detail=f"Platform '{platform}' not supported."
-        )
-
-    try:
-        scraper = PLATFORM_SCRAPERS[platform]
-        results = await scraper.search(query, limit)
-        return results
-    except Exception as e:
-        logging.error(f"Error while scraping {platform}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/detail/{platform}/{product_url:path}", tags=["Scraper"])
@@ -193,6 +179,188 @@ async def search_all_platforms(query: str, limit: int = 10):
             results[platform] = []
 
     return [{"results": results, "errors": errors}] if errors else [results]
+
+
+
+@router.get(
+    "/products/categories/{query}", tags=["Query"], response_model=List[Product]
+)
+async def search_categories_endpoint(query: str, similarity_threshold: int = 80):
+    """Recherche floue sur les catégories de produits."""
+    try:
+        results = await query_instance.search_categories(query, similarity_threshold)
+        return results
+    except Exception as e:
+        logging.error(f"Erreur lors de la recherche des catégories: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/products", tags=["Query"], response_model=List[Product])
+async def get_all_products_endpoint(source: Optional[str] = None):
+    """Récupère tous les produits, éventuellement filtrés par source."""
+    try:
+        results = await query_instance.get_all_product(source)
+        return results
+    except Exception as e:
+        logging.error(f"Erreur lors de la récupération des produits: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/products/category/{category}", tags=["Query"], response_model=List[Product]
+)
+async def get_products_by_category_endpoint(category: str):
+    """Récupère tous les produits appartenant à une catégorie spécifique."""
+    try:
+        results = await query_instance.get_products_by_category(category)
+        return results
+    except Exception as e:
+        logging.error(f"Erreur lors de la récupération des produits par catégorie: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/products/name/{name}", tags=["Query"], response_model=List[Product])
+async def search_products_by_name_endpoint(name: str):
+    """Recherche les produits par nom, en utilisant une recherche floue."""
+    try:
+        results = await query_instance.search_products_by_name(name)
+        return results
+    except Exception as e:
+        logging.error(f"Erreur lors de la recherche des produits par nom: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/products/price", tags=["Query"], response_model=List[Product])
+async def search_products_by_price_range_endpoint(
+    min_price: float = FastAPIQuery(...), max_price: float = FastAPIQuery(...)
+):
+    """Recherche les produits dans une plage de prix donnée."""
+    try:
+        results = await query_instance.search_products_by_price_range(
+            min_price, max_price
+        )
+        return results
+    except Exception as e:
+        logging.error(
+            f"Erreur lors de la recherche des produits par plage de prix: {e}"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/products/brand/{brand}", tags=["Query"], response_model=List[Product])
+async def search_products_by_brand_endpoint(brand: str):
+    """Recherche les produits par marque."""
+    try:
+        results = await query_instance.search_products_by_brand(brand)
+        return results
+    except Exception as e:
+        logging.error(f"Erreur lors de la recherche des produits par marque: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/products/condition/{condition}", tags=["Query"], response_model=List[Product]
+)
+async def search_products_by_condition_endpoint(condition: str):
+    """Recherche les produits par état (condition)."""
+    try:
+        results = await query_instance.search_products_by_condition(condition)
+        return results
+    except Exception as e:
+        logging.error(f"Erreur lors de la recherche des produits par état: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/products/stock/{stock}", tags=["Query"], response_model=List[Product])
+async def search_products_by_stock_endpoint(stock: bool):
+    """Recherche les produits par disponibilité (stock)."""
+    try:
+        results = await query_instance.search_products_by_stock(stock)
+        return results
+    except Exception as e:
+        logging.error(
+            f"Erreur lors de la recherche des produits par disponibilité: {e}"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/products/description/{keywords}", tags=["Query"], response_model=List[Product]
+)
+async def search_products_by_description_keywords_endpoint(keywords: str):
+    """Recherche les produits par mots-clés dans la description."""
+    try:
+        results = await query_instance.search_products_by_description_keywords(keywords)
+        return results
+    except Exception as e:
+        logging.error(
+            f"Erreur lors de la recherche des produits par mots-clés dans la description: {e}"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/products/categories/multiple", tags=["Query"], response_model=List[Product]
+)
+async def search_products_by_multiple_categories_endpoint(
+    categories: List[str] = FastAPIQuery(...),
+):
+    """Recherche les produits appartenant à plusieurs catégories."""
+    try:
+        results = await query_instance.search_products_by_multiple_categories(
+            categories
+        )
+        return results
+    except Exception as e:
+        logging.error(f"Erreur lors de la recherche des produits par catégories: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/products/page", tags=["Query"], response_model=List[Product])
+async def get_products_with_pagination_endpoint(page: int = 1, page_size: int = 10):
+    """Récupère les produits avec pagination."""
+    try:
+        results = await query_instance.get_products_with_pagination(page, page_size)
+        return results
+    except Exception as e:
+        logging.error(
+            f"Erreur lors de la récupération des produits avec pagination: {e}"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/products/sort", tags=["Query"], response_model=List[Product])
+async def get_products_with_sorting_endpoint(
+    sort_by: str = FastAPIQuery(...), sort_direction: int = 1
+):
+    """Récupère les produits avec tri."""
+    try:
+        results = await query_instance.get_products_with_sorting(
+            sort_by, sort_direction
+        )
+        return results
+    except Exception as e:
+        logging.error(f"Erreur lors de la récupération des produits avec tri: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/products/{product_id}", tags=["Query"], response_model=Optional[Product])
+async def get_product_by_id_endpoint(product_id: str):
+    """Récupère un produit par son identifiant."""
+    try:
+        result = await query_instance.get_product_by_id(product_id)
+        if result:
+            return result
+        else:
+            raise HTTPException(status_code=404, detail="Product not found")
+    except Exception as e:
+        logging.error(f"Erreur lors de la récupération du produit par identifiant: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Include the router in the FastAPI application
+app.include_router(router, prefix="/api/v2")
+
 
 # Modèle pour la requête utilisateur
 class SearchRequest(BaseModel):
