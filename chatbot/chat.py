@@ -17,11 +17,12 @@ class Chatbot:
     def __init__(self):
         self.collection = None
         self.llm = ChatOpenAI(model="gpt-4", temperature=0)
-        self.chroma_db = None  
+        self.chroma_db = None
+
     async def initialize(self):
         if not self._inited:
             await self.init_db()
-            await self.init_chroma()  
+            await self.init_chroma()
             self._inited = True
         else:
             logging.info("Chatbot déjà initialisé")
@@ -38,8 +39,8 @@ class Chatbot:
         client = db_manager.get_client()
         self.collection = client["scraping_arbook"]["Product_scraping"]
 
-    async def init_chroma(self):  
-        self.chroma_db = ChromaManager(self.collection)  
+    async def init_chroma(self):
+        self.chroma_db = ChromaManager(self.collection)
         await self.chroma_db.initialize()
 
     def format_docs(self, docs):
@@ -47,25 +48,38 @@ class Chatbot:
 
     async def retrieve(self, query):
         await self.chroma_db.update_if_needed()
-        vector_store = (
-            self.chroma_db.get_vector_store()
-        )  
+        vector_store = self.chroma_db.get_vector_store()
         if not vector_store:
             return "La base de données vectorielle n'est pas initialisée."
 
-        template = """Tu es un vendeur en ligne expert. Un client te pose une question ou cherche un produit.
-        Utilise les informations suivantes pour répondre à sa demande. Si tu trouves plusieurs produits similaires, liste-les de manière claire et concise.
+        template = """
+        Tu es un assistant de vente en ligne expert, conçu pour aider les clients à trouver les produits qu'ils recherchent.
 
-        Informations sur les produits disponibles:
+        Un client te pose une question ou cherche un produit spécifique. Voici les informations sur les produits disponibles :
+
         {context}
 
-        Question du client: {question}
+        Question du client : {question}
 
-        Réponse:
+        Important :
+            Pour chaque produit pertinent, formate les informations suivantes comme indiqué :
+            <produit>
+                <id>{{_id}}</id>
+                <source>{{source}}</source>
+                <product_id>{{product_id}}</product_id>
+            </produit>
+
+        Réponds à la question du client en utilisant les informations fournies, en te concentrant sur le nom et la description des produits. Si plusieurs produits similaires sont disponibles, liste-les de manière claire et concise, en mettant en évidence leurs principales caractéristiques et différences.
+        Si la question du client ne concerne pas directement les produits disponibles, réponds de manière informative et professionnelle, en précisant que tu ne peux pas fournir d'informations supplémentaires en dehors des produits présents dans ta base de données.
+
+        Remarques Importantes :
+            - Ne donne pas de lien dans ta reponse.
+            - Considère un produit comme étant de "seconde main" si sa source n'est pas une source de produits neufs.
+            - Limite ta réponse à 3 produits." \
         """
 
         prompt = ChatPromptTemplate.from_template(template)
-        retriever = vector_store.as_retriever(k=10)
+        retriever = vector_store.as_retriever(search_kwargs={"k": 5})
         llm = self.llm
         rag_chain = (
             {"context": retriever | self.format_docs, "question": RunnablePassthrough()}

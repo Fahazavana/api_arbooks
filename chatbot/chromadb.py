@@ -2,17 +2,19 @@ from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 import os
 import logging
+import json
 
 # Configuration des logs
 logging.basicConfig(level=logging.INFO)
 
+
 class ChromaManager:
     """Gère l'initialisation et la mise à jour de la base de données vectorielle ChromaDB."""
 
-    _instance = None  
-    _initialized = False 
-    _vector_store = None 
-    persist_directory = "./chroma_db"  
+    _instance = None
+    _initialized = False
+    _vector_store = None
+    persist_directory = "./chroma_db"
 
     def __new__(cls, collection, *args, **kwargs):
         """Crée une instance unique de ChromaManager et stocke la collection MongoDB."""
@@ -23,11 +25,33 @@ class ChromaManager:
 
     async def __format_texts(self, products):
         """Formate les données des produits en texte pour l'intégration vectorielle."""
+
+        def format_value(value):
+            if isinstance(value, list):
+                return ", ".join(map(str, value))
+            elif isinstance(value, dict):
+                return json.dumps(value, ensure_ascii=False)
+            elif value is None:
+                return "Non disponible."
+            else:
+                return str(value)
+
         return [
             f"""
-                # Nom du produits/description:{p.get('name', '')}
-                * Description/taille/autre: {p.get('description', '')}
-                * Prix: {p.get('price', '')}
+            # Nom du produit/description: {format_value(p.get('name'))}
+            * _id: {format_value(p.get('_id'))}
+            * source: {format_value(p.get('source'))}
+            * product_id: {format_value(p.get('product_id'))}
+            * Prix: {format_value(p.get('price'))}
+            * Description: {format_value(p.get('description'))}
+            * Catégories: {format_value(p.get('categories'))}
+            * Condition: {format_value(p.get('condition'))}
+            * Tailles: {format_value(p.get('sizes'))}
+            * En stock: {format_value(p.get('stock'))}
+            * Marque: {format_value(p.get('brand'))}
+            * Couleurs: {format_value(p.get('colors'))}
+            * Caractéristiques/Description 1: {format_value(p.get('feature_table'))}
+            * Caractéristiques/Description 2: {format_value(p.get('feature_bullet'))}
             """
             for p in products
         ]
@@ -37,10 +61,10 @@ class ChromaManager:
         try:
             chroma_ids = set()
             if self._vector_store:
-                chroma_ids = set(self._vector_store._collection.get()['ids'])
+                chroma_ids = set(self._vector_store._collection.get()["ids"])
 
             mongo_docs = await self.collection.find().to_list(length=None)
-            new_docs = [doc for doc in mongo_docs if str(doc['_id']) not in chroma_ids]
+            new_docs = [doc for doc in mongo_docs if str(doc["_id"]) not in chroma_ids]
 
             if new_docs:
                 new_texts = await self.__format_texts(new_docs)
@@ -48,20 +72,24 @@ class ChromaManager:
                     self._vector_store = Chroma.from_texts(
                         new_texts,
                         embedding=OpenAIEmbeddings(),
-                        ids=[str(doc['_id']) for doc in new_docs],
+                        ids=[str(doc["_id"]) for doc in new_docs],
                         persist_directory=self.persist_directory,
                     )
                 else:
                     self._vector_store.add_texts(
                         new_texts,
-                        ids=[str(doc['_id']) for doc in new_docs],
+                        ids=[str(doc["_id"]) for doc in new_docs],
                     )
-                logging.info(f"Ajout de {len(new_texts)} nouveaux documents à ChromaDB.")
+                logging.info(
+                    f"Ajout de {len(new_texts)} nouveaux documents à ChromaDB."
+                )
             else:
                 logging.info("Aucun nouveau document trouvé dans MongoDB.")
 
         except Exception as e:
-            logging.error(f"Erreur lors de l'ajout de nouveaux documents à ChromaDB: {e}")
+            logging.error(
+                f"Erreur lors de l'ajout de nouveaux documents à ChromaDB: {e}"
+            )
 
     async def initialize(self):
         """Initialise la base de données vectorielle ChromaDB."""
@@ -70,7 +98,9 @@ class ChromaManager:
             return
 
         try:
-            if os.path.exists(self.persist_directory) and any(os.scandir(self.persist_directory)):
+            if os.path.exists(self.persist_directory) and any(
+                os.scandir(self.persist_directory)
+            ):
                 self._vector_store = Chroma(
                     persist_directory=self.persist_directory,
                     embedding_function=OpenAIEmbeddings(),
@@ -94,7 +124,9 @@ class ChromaManager:
     async def update_if_needed(self):
         """Met à jour ChromaDB avec les nouveaux documents de MongoDB."""
         if not self._initialized:
-            if os.path.exists(self.persist_directory) and any(os.scandir(self.persist_directory)):
+            if os.path.exists(self.persist_directory) and any(
+                os.scandir(self.persist_directory)
+            ):
                 logging.info("ChromaDB non initialisé, rechargement depuis le disque.")
                 self._vector_store = Chroma(
                     persist_directory=self.persist_directory,
