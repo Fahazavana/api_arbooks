@@ -145,7 +145,22 @@ async def get_platforms():
     """Get list of available platforms."""
     return {"platforms": list(PLATFORM_SCRAPERS.keys())}
 
+@router.get("/search/{platform}/{query}", tags=["Scraper"])
+async def search_products(platform: str, query: str, limit: int = 100):
+    """Search for products across specified platform."""
+    if platform == "all":
+        return await search_all_platforms(query, limit)
 
+    if platform not in PLATFORM_SCRAPERS:
+        raise HTTPException(status_code=400, detail=f"Platform '{platform}' not supported.")
+
+    try:
+        scraper = PLATFORM_SCRAPERS[platform]
+        results = await scraper.search(query, limit)
+        return results
+    except Exception as e:
+        logging.error(f"Error while scraping {platform}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/detail/{platform}/{product_url:path}", tags=["Scraper"])
 async def get_product_detail(platform: str, product_url: str):
@@ -216,23 +231,6 @@ async def search_products_by_name_endpoint(name: str):
     except Exception as e:
         logging.error(f"Erreur lors de la recherche des produits par nom: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# @router.get("/products/price", tags=["Query"], response_model=List[Product])
-# async def search_products_by_price_range_endpoint(
-#     min_price: float = FastAPIQuery(...), max_price: float = FastAPIQuery(...)
-# ):
-#     """Recherche les produits dans une plage de prix donnée."""
-#     try:
-#         results = await query_instance.search_products_by_price_range(
-#             min_price, max_price
-#         )
-#         return results
-#     except Exception as e:
-#         logging.error(
-#             f"Erreur lors de la recherche des produits par plage de prix: {e}"
-#         )
-#         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/products/brand/{brand}", tags=["Query"], response_model=List[Product])
