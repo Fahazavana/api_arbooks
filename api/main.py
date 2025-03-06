@@ -1,7 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from api.route import router as api_router
-
 from database.db import engine, Base
 
 app = FastAPI(
@@ -24,9 +23,6 @@ app.add_middleware(
 
 Base.metadata.create_all(bind=engine)
 
-# Inclure les routes
-app.include_router(api_router, prefix="/api/v2")
-
 
 @app.options("/{full_path:path}")
 async def preflight(full_path: str):
@@ -37,6 +33,11 @@ async def preflight(full_path: str):
 def read_root():
     return {"message": "Arbooks API is running!"}
 
+
+# vector_db = init_vector_db()
+
+# Inclure les routes
+app.include_router(api_router, prefix="/api/v2")
 
 if __name__ == "__main__":
     import uvicorn

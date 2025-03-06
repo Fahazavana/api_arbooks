@@ -5,7 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 from api.bd_scraping_arbook.models_scraping import Product_scraping
 
-MONGO_URI = os.environ['MONGODB_URI']
+MONGO_URI = os.environ.get('MONGODB_URI')
 
 class DatabaseManager:
     _instance = None

@@ -2,7 +2,6 @@ import os
 import cv2
 import numpy as np
 import pickle
-import base64
 from sqlalchemy.orm import Session
 from models.arcface_model import ArcFaceModel
 from database.user_model import FaceEmbedding

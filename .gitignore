@@ -5,6 +5,7 @@
 data/uploads/*
 data/processed/*
 data/raw/*
+chroma_db/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
