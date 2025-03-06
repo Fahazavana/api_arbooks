@@ -181,6 +181,16 @@ async def search_all_platforms(query: str, limit: int = 10):
     return [{"results": results, "errors": errors}] if errors else [results]
 
 
+# Query
+@router.get("/products", tags=["Query"], response_model=List[Product])
+async def get_all_products_endpoint(source: Optional[str] = None):
+    """Récupère tous les produits, éventuellement filtrés par source."""
+    try:
+        results = await query_instance.get_all_product(source)
+        return results
+    except Exception as e:
+        logging.error(f"Erreur lors de la récupération des produits: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get(
     "/products/categories/{query}", tags=["Query"], response_model=List[Product]
@@ -195,28 +205,6 @@ async def search_categories_endpoint(query: str, similarity_threshold: int = 80)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/products", tags=["Query"], response_model=List[Product])
-async def get_all_products_endpoint(source: Optional[str] = None):
-    """Récupère tous les produits, éventuellement filtrés par source."""
-    try:
-        results = await query_instance.get_all_product(source)
-        return results
-    except Exception as e:
-        logging.error(f"Erreur lors de la récupération des produits: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get(
-    "/products/category/{category}", tags=["Query"], response_model=List[Product]
-)
-async def get_products_by_category_endpoint(category: str):
-    """Récupère tous les produits appartenant à une catégorie spécifique."""
-    try:
-        results = await query_instance.get_products_by_category(category)
-        return results
-    except Exception as e:
-        logging.error(f"Erreur lors de la récupération des produits par catégorie: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/products/name/{name}", tags=["Query"], response_model=List[Product])
@@ -230,21 +218,21 @@ async def search_products_by_name_endpoint(name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/products/price", tags=["Query"], response_model=List[Product])
-async def search_products_by_price_range_endpoint(
-    min_price: float = FastAPIQuery(...), max_price: float = FastAPIQuery(...)
-):
-    """Recherche les produits dans une plage de prix donnée."""
-    try:
-        results = await query_instance.search_products_by_price_range(
-            min_price, max_price
-        )
-        return results
-    except Exception as e:
-        logging.error(
-            f"Erreur lors de la recherche des produits par plage de prix: {e}"
-        )
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.get("/products/price", tags=["Query"], response_model=List[Product])
+# async def search_products_by_price_range_endpoint(
+#     min_price: float = FastAPIQuery(...), max_price: float = FastAPIQuery(...)
+# ):
+#     """Recherche les produits dans une plage de prix donnée."""
+#     try:
+#         results = await query_instance.search_products_by_price_range(
+#             min_price, max_price
+#         )
+#         return results
+#     except Exception as e:
+#         logging.error(
+#             f"Erreur lors de la recherche des produits par plage de prix: {e}"
+#         )
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/products/brand/{brand}", tags=["Query"], response_model=List[Product])
@@ -270,18 +258,6 @@ async def search_products_by_condition_endpoint(condition: str):
         logging.error(f"Erreur lors de la recherche des produits par état: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@router.get("/products/stock/{stock}", tags=["Query"], response_model=List[Product])
-async def search_products_by_stock_endpoint(stock: bool):
-    """Recherche les produits par disponibilité (stock)."""
-    try:
-        results = await query_instance.search_products_by_stock(stock)
-        return results
-    except Exception as e:
-        logging.error(
-            f"Erreur lors de la recherche des produits par disponibilité: {e}"
-        )
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
@@ -326,35 +302,6 @@ async def get_products_with_pagination_endpoint(page: int = 1, page_size: int = 
         logging.error(
             f"Erreur lors de la récupération des produits avec pagination: {e}"
         )
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/products/sort", tags=["Query"], response_model=List[Product])
-async def get_products_with_sorting_endpoint(
-    sort_by: str = FastAPIQuery(...), sort_direction: int = 1
-):
-    """Récupère les produits avec tri."""
-    try:
-        results = await query_instance.get_products_with_sorting(
-            sort_by, sort_direction
-        )
-        return results
-    except Exception as e:
-        logging.error(f"Erreur lors de la récupération des produits avec tri: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/products/{product_id}", tags=["Query"], response_model=Optional[Product])
-async def get_product_by_id_endpoint(product_id: str):
-    """Récupère un produit par son identifiant."""
-    try:
-        result = await query_instance.get_product_by_id(product_id)
-        if result:
-            return result
-        else:
-            raise HTTPException(status_code=404, detail="Product not found")
-    except Exception as e:
-        logging.error(f"Erreur lors de la récupération du produit par identifiant: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

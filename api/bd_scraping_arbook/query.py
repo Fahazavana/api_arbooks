@@ -22,7 +22,7 @@ class Query:
             if not success:
                 logging.error("Échec de l'initialisation de la base de données.")
                 return False
-        if not self.collection:
+        if self.collection is None:
             client: AsyncIOMotorClient = self.db_manager.get_client()
             if not client:
                 logging.error("MongoDB client is not initialized.")
@@ -183,4 +183,19 @@ class Query:
             logging.error(
                 f"Erreur lors de la recherche des produits par mots-clés dans la description: {e}"
             )
+            return []
+        
+    async def get_products_with_pagination(self, page: int = 1, page_size: int = 10) -> List[Document]:
+        """Récupère les produits avec pagination."""
+        if not await self.__check_db():
+            return []
+        try:
+
+            skip = (page - 1) * page_size
+            results = await self.collection.find().skip(skip).limit(page_size).to_list()
+            if results:
+                return self.__format_results(results)
+            return []
+        except Exception as e:
+            print(f"Erreur lors de la récupération des produits avec pagination: {e}")
             return []
