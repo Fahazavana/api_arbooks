@@ -1,3 +1,4 @@
+import os
 import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -12,7 +13,7 @@ from bs4 import BeautifulSoup
 from .BaseScraper import BaseScraper
 from api.bd_scraping_arbook.models_scraping import Product_scraping
 from .utils import Product
-
+logging.basicConfig(level=os.environ.get("LOGLEVEL"))
 
 async def save_to_mongo(db_manager, products: list[dict]):
     """Insère les produits scrappés dans MongoDB en évitant les doublons (mise à jour si déjà existant)."""

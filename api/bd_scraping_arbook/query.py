@@ -5,6 +5,9 @@ from typing import List, Optional
 import logging
 import re
 from pymongo import ASCENDING, DESCENDING
+import os
+
+logging.basicConfig(level=os.environ.get("LOGLEVEL"))
 
 
 class Query:
@@ -184,8 +187,10 @@ class Query:
                 f"Erreur lors de la recherche des produits par mots-clés dans la description: {e}"
             )
             return []
-        
-    async def get_products_with_pagination(self, page: int = 1, page_size: int = 10) -> List[Document]:
+
+    async def get_products_with_pagination(
+        self, page: int = 1, page_size: int = 10
+    ) -> List[Document]:
         """Récupère les produits avec pagination."""
         if not await self.__check_db():
             return []
@@ -197,5 +202,5 @@ class Query:
                 return self.__format_results(results)
             return []
         except Exception as e:
-            print(f"Erreur lors de la récupération des produits avec pagination: {e}")
+            logging.error(f"Erreur lors de la récupération des produits avec pagination: {e}")
             return []

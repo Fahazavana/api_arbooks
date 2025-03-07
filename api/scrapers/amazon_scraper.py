@@ -12,6 +12,8 @@ from bs4 import BeautifulSoup
 from .BaseScraper import BaseScraper
 from api.bd_scraping_arbook.models_scraping import Product_scraping
 from .utils import Product
+import os 
+logging.basicConfig(level=os.environ.get("LOGLEVEL"))
 
 
 async def save_to_mongo(db_manager, products: list[dict]):

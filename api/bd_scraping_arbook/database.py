@@ -4,6 +4,7 @@ from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 from api.bd_scraping_arbook.models_scraping import Product_scraping
+logging.basicConfig(level=os.environ.get("LOGLEVEL"))
 
 MONGO_URI = os.environ.get('MONGODB_URI')
 

@@ -1,4 +1,5 @@
 from api.bd_scraping_arbook.database import DatabaseManager
+import os
 import logging
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
@@ -8,7 +9,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=os.environ.get("LOGLEVEL"))
 
 
 class Chatbot:

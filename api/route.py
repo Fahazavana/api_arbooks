@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter, UploadFile, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import Query as FastAPIQuery
 import os
 import shutil
@@ -23,7 +23,7 @@ from .scrapers.utils import Product
 from chatbot.chat import Chatbot
 
 # Disable logging by setting the level to WARNING
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=os.environ.get("LOGLEVEL"))
 
 # Initialize FastAPI application and router
 app = FastAPI()
@@ -140,34 +140,49 @@ PLATFORM_SCRAPERS = {
 }
 
 
+class PlatformList(BaseModel):
+    platforms: List[str]
+
+
 @router.get("/platforms", tags=["Scraper"])
 async def get_platforms():
-    """Get list of available platforms."""
-    return {"platforms": list(PLATFORM_SCRAPERS.keys())}
+    """Récupère la liste des plateformes disponibles."""
+    return {"platforms": ["all"] + list(PLATFORM_SCRAPERS.keys())}
 
-@router.get("/search/{platform}/{query}", tags=["Scraper"])
+
+@router.get(
+    "/search/{platform}/{query}",
+    tags=["Scraper"],
+)
 async def search_products(platform: str, query: str, limit: int = 100):
-    """Search for products across specified platform."""
+    """Recherche des produits sur une plateforme spécifique."""
     if platform == "all":
         return await search_all_platforms(query, limit)
 
     if platform not in PLATFORM_SCRAPERS:
-        raise HTTPException(status_code=400, detail=f"Platform '{platform}' not supported.")
+        raise HTTPException(
+            status_code=400, detail=f"Plateforme '{platform}' non supportée."
+        )
 
     try:
         scraper = PLATFORM_SCRAPERS[platform]
         results = await scraper.search(query, limit)
         return results
     except Exception as e:
-        logging.error(f"Error while scraping {platform}: {str(e)}")
+        logging.error(f"Erreur lors du scraping de {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/detail/{platform}/{product_url:path}", tags=["Scraper"])
+
+@router.get(
+    "/detail/{platform}/{product_url:path}",
+    tags=["Scraper"],
+    response_model=List[Product],
+)
 async def get_product_detail(platform: str, product_url: str):
-    """Get details for a specific product on a platform."""
+    """Récupère les détails d'un produit spécifique sur une plateforme."""
     if platform not in PLATFORM_SCRAPERS:
         raise HTTPException(
-            status_code=400, detail=f"Platform '{platform}' not supported."
+            status_code=400, detail=f"Plateforme '{platform}' non supportée."
         )
 
     try:
@@ -175,12 +190,104 @@ async def get_product_detail(platform: str, product_url: str):
         results = await scraper.get_detail(product_url)
         return results
     except Exception as e:
-        logging.error(f"Error searching on {platform}: {str(e)}")
+        logging.error(f"Erreur lors de la recherche sur {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ProductQueries(BaseModel):
+    product_queries: List[str]
+    limit: int = 100
+
+
+@router.post("/search/multiple_products", tags=["Scraper"])
+async def search_multiple_products(product_queries: ProductQueries):
+    """Recherche une liste de produits sur toutes les plateformes."""
+    results = {}
+    errors = []
+    for platform in PLATFORM_SCRAPERS.keys():
+        results[platform] = []
+    for query in product_queries.product_queries:
+        logging.info(f"Searching for query: {query}")
+        all_results = await search_all_platforms(query, product_queries.limit)
+        for platform, product_list in all_results[0]["results"].items():
+            results[platform].extend(product_list)
+        if all_results[0]["errors"]:
+            errors.extend(all_results["errors"])
+    return [{"results": results, "errors": errors}]
+
+
+@router.post("/fill_detail/", tags=["Scraper"])
+async def fill_detail():
+    """Remplit les détails des produits dans la base de données."""
+    if not db_manager.is_initialized():  # Vérifie l'initialisation
+        success = await db_manager.initialize()
+        if not success:
+            logging.error(
+                "Échec de l'initialisation de la base de données. Annulation de l'insertion."
+            )
+            return {"erreur": "Erreur de la db"}
+    try:
+
+        collection = db_manager.get_client()["scraping_arbook"]["Product_scraping"]
+
+        documents = await collection.find({}).to_list(None)
+
+        erreurs = []
+
+        for document in documents:
+            source = document.get("source")
+            url = document.get("url")
+            name = document.get("name")
+
+            if source and url:
+                try:
+                    await get_product_detail(
+                        source, url
+                    )  # get_product_detail sauvegarde dans la base de données
+                    logging.info(f"Détails remplis pour {name} depuis {source}")
+
+                except HTTPException as http_ex:
+                    logging.error(
+                        f"Erreur HTTP lors du remplissage des détails pour {name} depuis {source} : {http_ex.detail}"
+                    )
+                    erreurs.append(
+                        {
+                            "detail": f"Erreur HTTP lors du remplissage des détails pour {name} depuis {source}"
+                        }
+                    )
+                except Exception as e:
+                    logging.error(
+                        f"Erreur lors du remplissage des détails pour {name} depuis {source} : {str(e)}"
+                    )
+                    erreurs.append(
+                        {
+                            "detail": f"Erreur lors du remplissage des détails pour {name} depuis {source} : {str(e)}"
+                        }
+                    )
+
+            else:
+                logging.warning(f"Document manquant la source ou l'URL : {document}")
+                erreurs.append(
+                    {"detail": f"Document manquant la source ou l'URL : {document}"}
+                )
+
+        if erreurs:
+            return {
+                "message": "Processus de remplissage des détails terminé avec des erreurs.",
+                "erreurs": erreurs,
+            }
+
+        return {"message": "Processus de remplissage des détails terminé."}
+
+    except Exception as e:
+        logging.error(f"Erreur lors de l'accès à la base de données : {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Erreur d'accès à la base de données."
+        )
+
+
 async def search_all_platforms(query: str, limit: int = 10):
-    """Search for products on all available platforms."""
+    """Recherche des produits sur toutes les plateformes disponibles."""
     results = {}
     errors = []
 
@@ -189,14 +296,14 @@ async def search_all_platforms(query: str, limit: int = 10):
             platform_results = await scraper.search(query, limit)
             results[platform] = platform_results
         except Exception as e:
-            logging.error(f"Error while scraping {platform}: {str(e)}")
+            logging.error(f"Erreur lors du scraping de {platform}: {str(e)}")
             errors.append({"platform": platform, "error": str(e)})
             results[platform] = []
 
-    return [{"results": results, "errors": errors}] if errors else [results]
+    return [{"results": results, "errors": errors}]
 
 
-# Query
+# Requêtes de base de données
 @router.get("/products", tags=["Query"], response_model=List[Product])
 async def get_all_products_endpoint(source: Optional[str] = None):
     """Récupère tous les produits, éventuellement filtrés par source."""
@@ -206,6 +313,7 @@ async def get_all_products_endpoint(source: Optional[str] = None):
     except Exception as e:
         logging.error(f"Erreur lors de la récupération des produits: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get(
     "/products/categories/{query}", tags=["Query"], response_model=List[Product]
@@ -220,30 +328,6 @@ async def search_categories_endpoint(query: str, similarity_threshold: int = 80)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
-
-@router.get("/products/name/{name}", tags=["Query"], response_model=List[Product])
-async def search_products_by_name_endpoint(name: str):
-    """Recherche les produits par nom, en utilisant une recherche floue."""
-    try:
-        results = await query_instance.search_products_by_name(name)
-        return results
-    except Exception as e:
-        logging.error(f"Erreur lors de la recherche des produits par nom: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/products/brand/{brand}", tags=["Query"], response_model=List[Product])
-async def search_products_by_brand_endpoint(brand: str):
-    """Recherche les produits par marque."""
-    try:
-        results = await query_instance.search_products_by_brand(brand)
-        return results
-    except Exception as e:
-        logging.error(f"Erreur lors de la recherche des produits par marque: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get(
     "/products/condition/{condition}", tags=["Query"], response_model=List[Product]
 )
@@ -255,7 +339,6 @@ async def search_products_by_condition_endpoint(condition: str):
     except Exception as e:
         logging.error(f"Erreur lors de la recherche des produits par état: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @router.get(
@@ -303,22 +386,20 @@ async def get_products_with_pagination_endpoint(page: int = 1, page_size: int = 
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Include the router in the FastAPI application
-app.include_router(router, prefix="/api/v2")
-
-
 # Modèle pour la requête utilisateur
 class SearchRequest(BaseModel):
     query: str
 
 
-@router.post("/bot/", tags=["bot"])
+@router.post("/bot/", tags=["Bot"])
 async def search(request: SearchRequest):
-    """🔍 Recherche un produit dans MongoDB et via RAG."""
+    """Recherche un produit dans MongoDB et via RAG."""
     chat_instance = await Chatbot.create()
     response = await chat_instance.handle_query(request.query)
     return {"query": request.query, "response": response}
 
 
 # Include the router in the FastAPI application
+app.include_router(router, prefix="/api/v2")
+# Inclusion du routeur pour le chatbot (sans préfixe)
 app.include_router(router)

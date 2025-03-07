@@ -5,7 +5,7 @@ import logging
 import json
 
 # Configuration des logs
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=os.environ.get("LOGLEVEL"))
 
 
 class ChromaManager:
