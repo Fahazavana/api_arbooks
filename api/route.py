@@ -455,7 +455,7 @@ class SimilarProduct(BaseModel):
 
 
 @router.post("/produits_similaires/", tags=["Système de Recommandation"])
-async def obtenir_produits_similaires(request: SimilarProduct):
+async def get_similar_product(request: SimilarProduct):
     """
     Endpoint pour récupérer les produits similaires basés sur un ID de produit donné.
     """
