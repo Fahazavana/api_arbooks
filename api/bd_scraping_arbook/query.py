@@ -79,7 +79,8 @@ class Query:
             logging.error(f"Erreur lors de la recherche dans la base de données: {e}")
             return []
 
-    def _filter_results(self, results, query, similarity_threshold):
+    @staticmethod
+    def _filter_results(results, query, similarity_threshold):
         """Filtre les résultats en utilisant fuzzywuzzy."""
         filtered_results = []
         for result in results:
@@ -97,7 +98,8 @@ class Query:
                     filtered_results.append(result)
         return filtered_results
 
-    def __format_results(self, results):
+    @staticmethod
+    def __format_results(results):
         """Formate les résultats en convertissant _id en chaîne."""
         formatted_results = []
         for result in results:
@@ -122,21 +124,6 @@ class Query:
             logging.error(f"Erreur lors de la récupération des produits: {e}")
             return []
 
-    async def get_products_by_category(self, category: str) -> List[ProductResponse]:
-        """Récupère tous les produits appartenant à une catégorie spécifique."""
-        if not await self.__check_db():
-            return []
-        try:
-            results = await self.collection.find({"categories": category}).to_list()
-            if results:
-                return self.__format_results(results)
-            return []
-        except Exception as e:
-            logging.error(
-                f"Erreur lors de la récupération des produits par catégorie: {e}"
-            )
-            return []
-
     async def search_products_by_name(self, name: str) -> List[ProductResponse]:
         """Recherche les produits par nom, en utilisant une recherche floue."""
         if not await self.__check_db():
@@ -153,24 +140,24 @@ class Query:
             logging.error(f"Erreur lors de la recherche des produits par nom: {e}")
             return []
 
-    async def search_products_by_price_range(
-        self, min_price: float, max_price: float
-    ) -> List[ProductResponse]:
-        """Recherche les produits dans une plage de prix donnée."""
-        if not await self.__check_db():
-            return []
-        try:
-            results = await self.collection.find(
-                {"price": {"$gte": min_price, "$lte": max_price}}
-            ).to_list()
-            if results:
-                return self.__format_results(results)
-            return []
-        except Exception as e:
-            logging.error(
-                f"Erreur lors de la recherche des produits par plage de prix: {e}"
-            )
-            return []
+    # async def search_products_by_price_range(
+    #     self, min_price: float, max_price: float
+    # ) -> List[ProductResponse]:
+    #     """Recherche les produits dans une plage de prix donnée."""
+    #     if not await self.__check_db():
+    #         return []
+    #     try:
+    #         results = await self.collection.find(
+    #             {"price": {"$gte": min_price, "$lte": max_price}}
+    #         ).to_list()
+    #         if results:
+    #             return self.__format_results(results)
+    #         return []
+    #     except Exception as e:
+    #         logging.error(
+    #             f"Erreur lors de la recherche des produits par plage de prix: {e}"
+    #         )
+    #         return []
 
     async def search_products_by_brand(self, brand: str) -> List[ProductResponse]:
         """Recherche les produits par marque."""

@@ -17,7 +17,6 @@ from services_reconnaissance.face_recognition import capture_face, recognize_fac
 from database.db import get_db
 from .bd_scraping_arbook.query import Query, ProductResponse
 
-
 # Chatbot
 from chatbot.chat import Chatbot
 
@@ -120,7 +119,7 @@ async def capture_face_route(request: CaptureRequest, db: Session = Depends(get_
 
 @router.post("/recognize_face/", tags=["Image"])
 async def recognize_face_route(
-    request: RecognizeRequest, db: Session = Depends(get_db)
+        request: RecognizeRequest, db: Session = Depends(get_db)
 ):
     """Recognize a face."""
     try:
@@ -130,15 +129,14 @@ async def recognize_face_route(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-import logging
-from fastapi import APIRouter
-
-# Assurez-vous que db_manager, recsys_instance et chat_instance sont définis globalement
 db_manager = None
 recsys_instance = None
 chat_instance = None
+vinted_scraper = None
+amazon_scraper = None
+query_instance = None
+PLATFORM_SCRAPERS = None
 
-router = APIRouter()
 
 @router.on_event("startup")
 async def startup_event():
@@ -403,24 +401,6 @@ async def search_products_by_description_keywords_endpoint(keywords: str):
         )
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@router.get(
-    "/products/categories/multiple",
-    tags=["Query"],
-    response_model=List[ProductResponse],
-)
-async def search_products_by_multiple_categories_endpoint(
-    categories: List[str] = FastAPIQuery(...),
-):
-    """Recherche les produits appartenant à plusieurs catégories."""
-    try:
-        results = await query_instance.search_products_by_multiple_categories(
-            categories
-        )
-        return results
-    except Exception as e:
-        logging.error(f"Erreur lors de la recherche des produits par catégories: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/products/page", tags=["Query"], response_model=List[ProductResponse])

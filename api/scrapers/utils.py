@@ -1,6 +1,5 @@
 from dataclasses import dataclass, asdict
-from typing import Optional, List, Dict, Union, Any
-from pydantic import BaseModel
+from typing import Optional, List, Dict, Union
 
 @dataclass
 class Product:
@@ -20,24 +19,19 @@ class Product:
     stock: Optional[bool] = None
     is_exclusive: Optional[bool] = None
     rating: Optional[str] = None
-    description: Optional[str] = None
     brand: Optional[str] = None
     colors: Optional[Union[str, List[str], Dict[str, str]]] = None
     views: Optional[int] = None
     interested: Optional[int] = None
     uploaded: Optional[str] = None
     payment_methods: Optional[str] = None
-    interested: Optional[int] = None
     owner_name: Optional[str] = None
     owner_profile_url: Optional[str] = None
     feature_table: Optional[Dict[str, str]] = None
     feature_bullet: Optional[List[str]] = None
 
     def to_dict(self) -> Dict:
-        product_dict = asdict(self)
-        if self._id:
-            product_dict["_id"] = str(self._id)
-        return product_dict
+        return asdict(self)
 
     def is_valid(self) -> bool:
         return all(
