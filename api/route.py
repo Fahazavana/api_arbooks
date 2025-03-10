@@ -15,12 +15,14 @@ from .scrapers.vinted_scraper import VintedScraper
 from .scrapers.amazon_scraper import AmazonScraper
 from services_reconnaissance.face_recognition import capture_face, recognize_face
 from database.db import get_db
-from .bd_scraping_arbook.query import Query
-from .scrapers.utils import Product
+from .bd_scraping_arbook.query import Query, ProductResponse
 
 
 # Chatbot
 from chatbot.chat import Chatbot
+
+# RecSys
+from recsys.recsys import RecSys
 
 # Disable logging by setting the level to WARNING
 logging.basicConfig(level=os.environ.get("LOGLEVEL"))
@@ -128,16 +130,58 @@ async def recognize_face_route(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# Scraping endpoints
-db_manager = DatabaseManager()
-vinted_scraper = VintedScraper(db_manager)
-amazon_scraper = AmazonScraper(db_manager)
-query_instance = Query(db_manager)
+import logging
+from fastapi import APIRouter
 
-PLATFORM_SCRAPERS = {
-    "vinted": vinted_scraper,
-    "amazon": amazon_scraper,
-}
+# Assurez-vous que db_manager, recsys_instance et chat_instance sont définis globalement
+db_manager = None
+recsys_instance = None
+chat_instance = None
+
+router = APIRouter()
+
+@router.on_event("startup")
+async def startup_event():
+    global recsys_instance
+    global chat_instance
+    global db_manager
+
+    try:
+        db_manager = DatabaseManager()
+        success = await db_manager.initialize()
+        if success:
+            logging.info("Base de données initialisée avec succès.")
+        else:
+            logging.error("Échec de l'initialisation de la base de données.")
+            return  # Arrête l'exécution si l'initialisation échoue
+    except Exception as e:
+        logging.error(f"Échec de l'initialisation de la base de données : {e}")
+        return
+
+    try:
+        chat_instance = await Chatbot.create()
+        logging.info("Chatbot initialisé avec succès.")
+    except Exception as e:
+        logging.error(f"Échec de l'initialisation du Chatbot : {e}")
+
+    try:
+        recsys_instance = await RecSys.create()
+        logging.info("RecSys initialisé avec succès.")
+    except Exception as e:
+        logging.error(f"Échec de l'initialisation de RecSys : {e}")
+
+    # Initialisation des scrapers et de query_instance après l'initialisation de db_manager
+    global vinted_scraper
+    global amazon_scraper
+    global query_instance
+    global PLATFORM_SCRAPERS
+    vinted_scraper = VintedScraper(db_manager)
+    amazon_scraper = AmazonScraper(db_manager)
+    query_instance = Query(db_manager)
+    PLATFORM_SCRAPERS = {
+        "vinted": vinted_scraper,
+        "amazon": amazon_scraper,
+    }
 
 
 class PlatformList(BaseModel):
@@ -176,7 +220,7 @@ async def search_products(platform: str, query: str, limit: int = 100):
 @router.get(
     "/detail/{platform}/{product_url:path}",
     tags=["Scraper"],
-    response_model=List[Product],
+    response_model=List[ProductResponse],
 )
 async def get_product_detail(platform: str, product_url: str):
     """Récupère les détails d'un produit spécifique sur une plateforme."""
@@ -304,7 +348,7 @@ async def search_all_platforms(query: str, limit: int = 10):
 
 
 # Requêtes de base de données
-@router.get("/products", tags=["Query"], response_model=List[Product])
+@router.get("/products", tags=["Query"], response_model=List[ProductResponse])
 async def get_all_products_endpoint(source: Optional[str] = None):
     """Récupère tous les produits, éventuellement filtrés par source."""
     try:
@@ -316,7 +360,7 @@ async def get_all_products_endpoint(source: Optional[str] = None):
 
 
 @router.get(
-    "/products/categories/{query}", tags=["Query"], response_model=List[Product]
+    "/products/categories/{query}", tags=["Query"], response_model=List[ProductResponse]
 )
 async def search_categories_endpoint(query: str, similarity_threshold: int = 80):
     """Recherche floue sur les catégories de produits."""
@@ -329,7 +373,9 @@ async def search_categories_endpoint(query: str, similarity_threshold: int = 80)
 
 
 @router.get(
-    "/products/condition/{condition}", tags=["Query"], response_model=List[Product]
+    "/products/condition/{condition}",
+    tags=["Query"],
+    response_model=List[ProductResponse],
 )
 async def search_products_by_condition_endpoint(condition: str):
     """Recherche les produits par état (condition)."""
@@ -342,7 +388,9 @@ async def search_products_by_condition_endpoint(condition: str):
 
 
 @router.get(
-    "/products/description/{keywords}", tags=["Query"], response_model=List[Product]
+    "/products/description/{keywords}",
+    tags=["Query"],
+    response_model=List[ProductResponse],
 )
 async def search_products_by_description_keywords_endpoint(keywords: str):
     """Recherche les produits par mots-clés dans la description."""
@@ -357,7 +405,9 @@ async def search_products_by_description_keywords_endpoint(keywords: str):
 
 
 @router.get(
-    "/products/categories/multiple", tags=["Query"], response_model=List[Product]
+    "/products/categories/multiple",
+    tags=["Query"],
+    response_model=List[ProductResponse],
 )
 async def search_products_by_multiple_categories_endpoint(
     categories: List[str] = FastAPIQuery(...),
@@ -373,7 +423,7 @@ async def search_products_by_multiple_categories_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/products/page", tags=["Query"], response_model=List[Product])
+@router.get("/products/page", tags=["Query"], response_model=List[ProductResponse])
 async def get_products_with_pagination_endpoint(page: int = 1, page_size: int = 10):
     """Récupère les produits avec pagination."""
     try:
@@ -397,6 +447,34 @@ async def search(request: SearchRequest):
     chat_instance = await Chatbot.create()
     response = await chat_instance.handle_query(request.query)
     return {"query": request.query, "response": response}
+
+
+class SimilarProduct(BaseModel):
+    product_id: str
+    n_similar: int
+
+
+@router.post("/produits_similaires/", tags=["Système de Recommandation"])
+async def obtenir_produits_similaires(request: SimilarProduct):
+    """
+    Endpoint pour récupérer les produits similaires basés sur un ID de produit donné.
+    """
+    if recsys_instance is None:
+        raise HTTPException(
+            status_code=500, detail="Système de recommandation non initialisé."
+        )
+
+    try:
+        produits_similaires = await recsys_instance.get_similar(
+            request.product_id, request.n_similar
+        )
+        return {"produits_similaires": produits_similaires}
+    except Exception as e:
+        logging.error(f"Erreur lors de la récupération des produits similaires : {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Erreur lors de la récupération des produits similaires.",
+        )
 
 
 # Include the router in the FastAPI application

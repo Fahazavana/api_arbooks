@@ -62,7 +62,7 @@ class ChromaManager:
             chroma_ids = set()
             if self._vector_store:
                 chroma_ids = set(self._vector_store._collection.get()["ids"])
-
+                
             mongo_docs = await self.collection.find().to_list(length=None)
             new_docs = [doc for doc in mongo_docs if str(doc["_id"]) not in chroma_ids]
 
@@ -146,3 +146,24 @@ class ChromaManager:
             await self.__add_new_documents()
         else:
             logging.info("ChromaDB est à jour.")
+
+    @classmethod
+    async def create(cls):
+        """Create a new ChromaManager instance and initialize it."""
+        instance = cls(None) 
+        await instance.initialize()
+        return instance
+
+    def get_collection(self):
+        """Return the chromadb collection."""
+        return self._vector_store._collection if self._vector_store else None
+
+    def get_similar(self, query_id, embedding, n_results=5):
+        """Get similar embeddings from ChromaDB."""
+        if not self._vector_store:
+            logging.warning("ChromaDB n'est pas encore initialisé.")
+            return None
+        results = self._vector_store.similarity_search_by_vector(
+            embedding=embedding, k=n_results
+        )
+        return [doc.id for doc in results if doc.id != query_id]

@@ -1,13 +1,43 @@
 from fuzzywuzzy import fuzz
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import Document
-from typing import List, Optional
+from pydantic import BaseModel
+from typing import List, Optional, Union, Dict
 import logging
 import re
 from pymongo import ASCENDING, DESCENDING
 import os
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL"))
+
+class ProductResponse(BaseModel):
+    source:str
+    id: Optional[str]
+    product_id: Optional[str] = None
+    name: Optional[str] = None
+    price: Optional[str] = None
+    url: Optional[str] = None
+    main_photo: Optional[str] = None
+    description: Optional[str] = None
+    price_with_protection: Optional[str] = None
+    categories: Optional[List[str]] = None
+    detailed_photos: Optional[List[str]] = None
+    condition: Optional[str] = None
+    sizes: Optional[Union[str, List[str]]] = None
+    delivery_price: Optional[str] = None
+    stock: Optional[bool] = None
+    is_exclusive: Optional[bool] = None
+    rating: Optional[str] = None
+    brand: Optional[str] = None
+    colors: Optional[Union[str, List[str], Dict[str, str]]] = None
+    views: Optional[int] = None
+    interested: Optional[int] = None
+    uploaded: Optional[str] = None
+    payment_methods: Optional[str] = None
+    owner_name: Optional[str] = None
+    owner_profile_url: Optional[str] = None
+    feature_table: Optional[Dict[str, str]] = None
+    feature_bullet: Optional[List[str]] = None
 
 
 class Query:
@@ -35,7 +65,7 @@ class Query:
             logging.info("Collection Product_scraping initialisée.")
         return True
 
-    async def search_categories(self, query, similarity_threshold=80) -> List[Document]:
+    async def search_categories(self, query, similarity_threshold=80) -> List[ProductResponse]:
         """Effectue une recherche floue sur les catégories de produits."""
         if not await self.__check_db():
             return []
@@ -63,7 +93,7 @@ class Query:
                     fuzz.partial_ratio(query.lower(), category.lower())
                     > similarity_threshold
                 ):
-                    result["_id"] = str(result["_id"])
+                    result["id"] = str(result["_id"])
                     filtered_results.append(result)
         return filtered_results
 
@@ -72,13 +102,13 @@ class Query:
         formatted_results = []
         for result in results:
             try:
-                result["_id"] = str(result["_id"])
+                result["id"] = str(result["_id"])
                 formatted_results.append(result)
             except Exception as e:
                 logging.error(f"Erreur lors du formatage des résultats: {e}")
         return formatted_results
 
-    async def get_all_product(self, source: Optional[str] = None) -> List[Document]:
+    async def get_all_product(self, source: Optional[str] = None) -> List[ProductResponse]:
         """Récupère tous les produits, éventuellement filtrés par source."""
         if not await self.__check_db():
             return []
@@ -92,7 +122,7 @@ class Query:
             logging.error(f"Erreur lors de la récupération des produits: {e}")
             return []
 
-    async def get_products_by_category(self, category: str) -> List[Document]:
+    async def get_products_by_category(self, category: str) -> List[ProductResponse]:
         """Récupère tous les produits appartenant à une catégorie spécifique."""
         if not await self.__check_db():
             return []
@@ -107,7 +137,7 @@ class Query:
             )
             return []
 
-    async def search_products_by_name(self, name: str) -> List[Document]:
+    async def search_products_by_name(self, name: str) -> List[ProductResponse]:
         """Recherche les produits par nom, en utilisant une recherche floue."""
         if not await self.__check_db():
             return []
@@ -125,7 +155,7 @@ class Query:
 
     async def search_products_by_price_range(
         self, min_price: float, max_price: float
-    ) -> List[Document]:
+    ) -> List[ProductResponse]:
         """Recherche les produits dans une plage de prix donnée."""
         if not await self.__check_db():
             return []
@@ -142,7 +172,7 @@ class Query:
             )
             return []
 
-    async def search_products_by_brand(self, brand: str) -> List[Document]:
+    async def search_products_by_brand(self, brand: str) -> List[ProductResponse]:
         """Recherche les produits par marque."""
         if not await self.__check_db():
             return []
@@ -155,7 +185,7 @@ class Query:
             logging.error(f"Erreur lors de la recherche des produits par marque: {e}")
             return []
 
-    async def search_products_by_condition(self, condition: str) -> List[Document]:
+    async def search_products_by_condition(self, condition: str) -> List[ProductResponse]:
         """Recherche les produits par état (condition)."""
         if not await self.__check_db():
             return []
@@ -170,7 +200,7 @@ class Query:
 
     async def search_products_by_description_keywords(
         self, keywords: str
-    ) -> List[Document]:
+    ) -> List[ProductResponse]:
         """Recherche les produits par mots-clés dans la description."""
         if not await self.__check_db():
             return []
@@ -190,7 +220,7 @@ class Query:
 
     async def get_products_with_pagination(
         self, page: int = 1, page_size: int = 10
-    ) -> List[Document]:
+    ) -> List[ProductResponse]:
         """Récupère les produits avec pagination."""
         if not await self.__check_db():
             return []

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, asdict
-from typing import Optional, List, Dict, Union
-
+from typing import Optional, List, Dict, Union, Any
+from pydantic import BaseModel
 
 @dataclass
 class Product:
@@ -34,7 +34,10 @@ class Product:
     feature_bullet: Optional[List[str]] = None
 
     def to_dict(self) -> Dict:
-        return asdict(self)
+        product_dict = asdict(self)
+        if self._id:
+            product_dict["_id"] = str(self._id)
+        return product_dict
 
     def is_valid(self) -> bool:
         return all(
@@ -48,3 +51,7 @@ class Product:
 
     def __repr__(self):
         return f"🛒 {self.source}-{self.product_id}-{self.price}-{self.name}"
+
+
+
+
